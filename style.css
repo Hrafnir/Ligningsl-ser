@@ -1,4 +1,4 @@
-/* Version: #4 */
+/* Version: #6 */
 :root {
     --bg-color: #f4f7f6;
     --paper-color: #ffffff;
@@ -107,6 +107,7 @@ header {
     padding: 10px 0;
     border-bottom: 1px dashed transparent;
     transition: border-bottom 0.2s;
+    min-height: 60px; /* Sikrer nok plass til høye brøker */
 }
 
 .math-row:hover {
@@ -116,6 +117,10 @@ header {
 .left-side {
     text-align: right;
     padding-right: 10px;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    flex-wrap: wrap;
 }
 
 .equals {
@@ -126,11 +131,53 @@ header {
 .right-side {
     text-align: left;
     padding-left: 10px;
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    flex-wrap: wrap;
 }
 
 .unsimplified {
     color: #666;
     font-style: italic;
+}
+
+/* --- Nytt: Matematisk Formatering (Brøk og Potens) --- */
+.math-term {
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+}
+
+.fraction {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    vertical-align: middle;
+    margin: 0 5px;
+    font-size: 0.9em;
+}
+
+.numerator {
+    border-bottom: 2px solid var(--text-color);
+    padding: 0 5px;
+    line-height: 1.2;
+}
+
+.denominator {
+    padding: 0 5px;
+    line-height: 1.2;
+}
+
+.unsimplified .numerator {
+    border-bottom-color: #666;
+}
+
+sup {
+    font-size: 0.6em;
+    position: relative;
+    top: -0.6em;
+    margin-left: 2px;
 }
 
 /* --- Handlingsboks (Høyre kolonne) --- */
@@ -149,13 +196,15 @@ header {
     border-radius: 4px;
     font-size: 20px;
     color: #555;
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
     background-color: #fafafa;
 }
 
 .action-box::before {
     content: "| ";
     color: #aaa;
+    margin-right: 5px;
 }
 
 /* Aktivt panel for input */
@@ -241,4 +290,4 @@ header {
         padding: 4px;
     }
 }
-/* Version: #4 */
+/* Version: #6 */
