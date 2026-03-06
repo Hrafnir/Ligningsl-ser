@@ -1,0 +1,244 @@
+/* Version: #4 */
+:root {
+    --bg-color: #f4f7f6;
+    --paper-color: #ffffff;
+    --text-color: #333;
+    --accent-color: #007bff;
+    --accent-hover: #0056b3;
+    --border-color: #ccc;
+    --box-bg: #e9ecef;
+    --success-color: #28a745;
+    --success-hover: #218838;
+    --warning-color: #ffc107;
+    --warning-hover: #e0a800;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    margin: 0;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+header {
+    width: 100%;
+    max-width: 900px;
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+/* --- Kontrollpanel (Toppmeny) --- */
+.controls {
+    background: var(--paper-color);
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    width: 100%;
+    max-width: 900px;
+    box-sizing: border-box;
+    margin-bottom: 20px;
+}
+
+.control-group, .custom-eq-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.divider {
+    border-left: 2px solid var(--border-color);
+    height: 30px;
+    margin: 0 10px;
+}
+
+.controls input, .controls select, .controls button {
+    padding: 10px;
+    font-size: 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+}
+
+.controls button {
+    background-color: var(--accent-color);
+    color: white;
+    border: none;
+    cursor: pointer;
+    transition: background 0.3s;
+    font-weight: bold;
+}
+
+.controls button:hover {
+    background-color: var(--accent-hover);
+}
+
+/* --- Arbeidsflate (Ligningsløsning) --- */
+#workspace-container {
+    width: 100%;
+    max-width: 900px;
+    background: var(--paper-color);
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    min-height: 400px;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    position: relative;
+    overflow-y: auto;
+}
+
+/* Grid layout for å tvinge likhetstegn til å stå på linje */
+.math-row {
+    display: grid;
+    grid-template-columns: 1fr 40px 1fr 220px;
+    align-items: center;
+    font-size: 24px;
+    font-family: 'Courier New', Courier, monospace;
+    margin-bottom: 15px;
+    padding: 10px 0;
+    border-bottom: 1px dashed transparent;
+    transition: border-bottom 0.2s;
+}
+
+.math-row:hover {
+    border-bottom: 1px dashed #eee;
+}
+
+.left-side {
+    text-align: right;
+    padding-right: 10px;
+}
+
+.equals {
+    text-align: center;
+    font-weight: bold;
+}
+
+.right-side {
+    text-align: left;
+    padding-left: 10px;
+}
+
+.unsimplified {
+    color: #666;
+    font-style: italic;
+}
+
+/* --- Handlingsboks (Høyre kolonne) --- */
+.action-cell {
+    text-align: left;
+    padding-left: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Statisk boks for historikk (tegnet boks-stil) */
+.action-box {
+    border: 2px solid #555;
+    padding: 5px 15px;
+    border-radius: 4px;
+    font-size: 20px;
+    color: #555;
+    display: inline-block;
+    background-color: #fafafa;
+}
+
+.action-box::before {
+    content: "| ";
+    color: #aaa;
+}
+
+/* Aktivt panel for input */
+.active-action-panel {
+    display: flex;
+    gap: 5px;
+    background: var(--box-bg);
+    padding: 5px;
+    border-radius: 6px;
+    align-items: center;
+}
+
+.active-action-panel select {
+    font-size: 18px;
+    padding: 5px;
+    width: 60px;
+}
+
+.active-action-panel input {
+    font-size: 18px;
+    padding: 5px;
+    width: 80px;
+    text-align: center;
+}
+
+/* --- Knapper --- */
+.btn-small {
+    background-color: var(--success-color);
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+}
+
+.btn-small:hover { 
+    background-color: var(--success-hover); 
+}
+
+.btn-simplify {
+    background-color: var(--warning-color);
+    color: #333;
+    width: 100%;
+}
+
+.btn-simplify:hover { 
+    background-color: var(--warning-hover); 
+}
+
+/* --- Suksessmelding --- */
+#success-message {
+    margin-top: 30px;
+    padding: 20px;
+    background-color: #d4edda;
+    color: #155724;
+    border: 2px solid #c3e6cb;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 24px;
+    font-weight: bold;
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+.hidden {
+    display: none !important;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Responsivitet for mindre skjermer */
+@media (max-width: 768px) {
+    .math-row {
+        grid-template-columns: 1fr 20px 1fr 150px;
+        font-size: 18px;
+    }
+    .active-action-panel select, .active-action-panel input {
+        font-size: 14px;
+        padding: 4px;
+    }
+}
+/* Version: #4 */
