@@ -1,0 +1,63 @@
+<!-- Version: #3 -->
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Balansemetoden - Avansert</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <header>
+        <h1>Ligninger med Balansemetoden</h1>
+        <p>Utfør samme regneoperasjon på begge sider av likhetstegnet til x står alene. Støtter nå brøk (f.eks. 3/x) og andregrad (f.eks. x^2).</p>
+    </header>
+
+    <div class="controls">
+        <div class="control-group">
+            <label for="example-select">Velg et eksempel: </label>
+            <select id="example-select">
+                <optgroup label="Lineære (Enkel X)">
+                    <option value="0">2x - 4 = x + 4 (Fra bildet)</option>
+                    <option value="1">3x = 12</option>
+                    <option value="2">5x + 2 = 17</option>
+                </optgroup>
+                <optgroup label="Brøk (X i nevner)">
+                    <option value="3">12/x = 4</option>
+                    <option value="4">15/x + 2 = 7</option>
+                    <option value="5">24/x - 3 = 5</option>
+                </optgroup>
+                <optgroup label="Andregrad (Pythagoras)">
+                    <option value="6">x^2 = 25</option>
+                    <option value="7">x^2 + 16 = 25</option>
+                    <option value="8">2x^2 - 8 = 0</option>
+                    <option value="9">3x^2 = 27</option>
+                </optgroup>
+            </select>
+            <button id="btn-load-example">Last inn</button>
+        </div>
+        
+        <div class="custom-eq-group">
+            <span class="divider"></span>
+            <label>Eller skriv egen: </label>
+            <input type="text" id="custom-left" placeholder="x^2 + 9" style="width: 100px;">
+            <span> = </span>
+            <input type="text" id="custom-right" placeholder="25" style="width: 100px;">
+            <button id="btn-load-custom">Start</button>
+        </div>
+    </div>
+
+    <div id="workspace-container">
+        <div id="workspace">
+            <!-- Rader genereres her av JavaScript -->
+        </div>
+        <div id="success-message" class="hidden">
+            🎉 Gratulerer! Ligningen er løst! 🎉
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
+<!-- Version: #3 -->
