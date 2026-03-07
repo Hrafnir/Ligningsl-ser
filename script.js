@@ -1,4 +1,4 @@
-/* Version: #7 */
+/* Version: #13 */
 
 // === SEKSJON: Data & Eksempler ===
 const examples =[
@@ -10,25 +10,21 @@ const examples =[
     { left: "12/x", right: "4" },
     { left: "15/x + 2", right: "7" },
     { left: "24/x - 3", right: "5" },
-    // Andregrad & Parenteser (Ny!)
+    // Andregrad & Parenteser (CAS)
     { left: "x^2", right: "25" },
-    { left: "x^2 + 6^2", right: "10^2" }, // Pythagoras!
+    { left: "x^2 + 6^2", right: "10^2" }, 
     { left: "2(x + 3)", right: "14" },
     { left: "3x^2", right: "27" }
 ];
 
-// Applikasjonens Tilstand (State)
 let state = {
     lines:[], 
     currentStatus: 'IDLE', 
 };
 
+// === SEKSJON: Kjerne-Matematikk (Flate Polynomer) ===
+// Denne delen håndterer ren algebra når trærne "klappes sammen".
 
-// === SEKSJON: Matematikk-motor (Algebra & Polynomer) ===
-
-/**
- * Rydder opp et matematikk-objekt ved å fjerne verdier som er 0
- */
 function cleanState(poly) {
     let clean = {};
     for (let exp in poly) {
@@ -63,10 +59,10 @@ function polyMul(p1, p2) {
 
 function polyDiv(p1, p2) {
     let keys = Object.keys(p2);
-    if (keys.length !== 1) throw "Kan ikke dele på uttrykk med flere ledd/parenteser i denne versjonen.";
+    if (keys.length !== 1) throw "Kan ikke dele på komplekse uttrykk ennå.";
     let k2 = parseInt(keys[0]);
     let c2 = p2[k2];
-    if (c2 === 0) throw "Feil: Kan ikke dele på null.";
+    if (c2 === 0) throw "Kan ikke dele på null.";
     
     let res = {};
     for (let k1 in p1) {
@@ -77,23 +73,16 @@ function polyDiv(p1, p2) {
 
 function polyPow(poly, exp) {
     let keys = Object.keys(poly);
-    
-    // Spesialhåndtering for enkle ledd, f.eks. x^-1, 2x^2
     if (keys.length === 1) {
         let k = parseInt(keys[0]);
-        let c = poly[k];
         let res = {};
-        res[k * exp] = Math.pow(c, exp);
+        res[k * exp] = Math.pow(poly[k], exp);
         return cleanState(res);
     }
-    
-    if (!Number.isInteger(exp) || exp < 0) throw "Kan bare opphøye parenteser i hele, positive tall.";
+    if (!Number.isInteger(exp) || exp < 0) throw "Kan bare opphøye i hele, positive tall.";
     if (exp === 0) return {0: 1};
-    
     let res = {0: 1};
-    for (let i = 0; i < exp; i++) {
-        res = polyMul(res, poly);
-    }
+    for (let i = 0; i < exp; i++) res = polyMul(res, poly);
     return res;
 }
 
@@ -101,22 +90,21 @@ function applySqrt(poly) {
     let keys = Object.keys(poly);
     if (keys.length > 1) throw "Isoler leddet før du tar kvadratrot! Du kan ikke ta roten av flere ledd samtidig.";
     if (keys.length === 0) return {};
-    
     let exp = parseInt(keys[0]);
     let coef = poly[exp];
-    
     if (coef < 0) throw "Kan ikke ta kvadratroten av et negativt tall i denne appen.";
-    
     let newExp = exp / 2;
     if (!Number.isInteger(newExp)) throw `Kan ikke ta kvadratroten av x opphøyd i ${exp} på en ryddig måte her.`;
-    
     let res = {};
     res[newExp] = Math.sqrt(coef);
     return cleanState(res);
 }
 
 
-// === SEKSJON: Parser (Lexer & Recursive Descent Parser) ===
+// === SEKSJON: AST (Abstract Syntax Tree) Parser ===
+// Forstår ligningens STRUKTUR og beholder den (f.eks 6^2 forblir en Pow-Node)
+
+function uid() { return Math.random().toString(36).substr(2, 9); }
 
 function tokenize(str) {
     let tokens =[];
@@ -128,9 +116,7 @@ function tokenize(str) {
         if (char.toLowerCase() === 'x') { tokens.push({type: 'x', val: 'x'}); i++; continue; }
         if (/\d/.test(char) || char === '.') {
             let num = '';
-            while (i < s.length && (/\d/.test(s[i]) || s[i] === '.')) {
-                num += s[i]; i++;
-            }
+            while (i < s.length && (/\d/.test(s[i]) || s[i] === '.')) { num += s[i]; i++; }
             tokens.push({type: 'NUM', val: parseFloat(num)});
             continue;
         }
@@ -141,69 +127,63 @@ function tokenize(str) {
 
 function parseTokens(tokens) {
     let pos = 0;
-    function peek() { return tokens[pos]; }
-    function consume() { return tokens[pos++]; }
+    const peek = () => tokens[pos];
+    const consume = () => tokens[pos++];
 
-    // Expr -> Term (+/- Term)*
     function parseExpr() {
-        let poly = parseTerm();
+        let elements =[];
+        let firstSign = 1;
+        if (peek() && peek().type === '-') { consume(); firstSign = -1; }
+        else if (peek() && peek().type === '+') { consume(); }
+        
+        elements.push({ sign: firstSign, node: parseTerm() });
+
         while (peek() && (peek().type === '+' || peek().type === '-')) {
             let op = consume().type;
-            let right = parseTerm();
-            if (op === '+') poly = polyAdd(poly, right);
-            else poly = polySub(poly, right);
+            elements.push({ sign: op === '+' ? 1 : -1, node: parseTerm() });
         }
-        return cleanState(poly);
+        
+        // Hvis uttrykket bare har ett positivt ledd, trekk det ut for renere tre
+        if (elements.length === 1 && elements[0].sign === 1) return elements[0].node;
+        return { type: 'Expr', elements, id: uid() };
     }
 
-    // Term -> Factor (*/ Factor)* ELLER implicit multiplikasjon
     function parseTerm() {
-        let poly = parseFactor();
+        let node = parseFactor();
         while (peek()) {
             let p = peek();
             if (p.type === '*' || p.type === '/') {
                 let op = consume().type;
-                let right = parseFactor();
-                if (op === '*') poly = polyMul(poly, right);
-                else poly = polyDiv(poly, right);
+                node = { type: op === '*' ? 'Mul' : 'Div', left: node, right: parseFactor(), implicit: false, id: uid() };
             } else if (p.type === 'NUM' || p.type === 'x' || p.type === '(') {
-                // Implisitt multiplikasjon, f.eks "2x" eller "3(x+1)"
-                let right = parseFactor();
-                poly = polyMul(poly, right);
-            } else {
-                break;
-            }
+                node = { type: 'Mul', left: node, right: parseFactor(), implicit: true, id: uid() };
+            } else break;
         }
-        return poly;
+        return node;
     }
 
-    // Factor -> Base (^ Base)*
     function parseFactor() {
-        let poly = parseBase();
+        let node = parseBase();
         while (peek() && peek().type === '^') {
             consume();
-            let expNode = parseBase();
-            let keys = Object.keys(expNode);
-            if (keys.length !== 1 || expNode['0'] === undefined) throw "Eksponenten må være et vanlig tall.";
-            poly = polyPow(poly, expNode['0']);
+            node = { type: 'Pow', left: node, right: parseBase(), id: uid() };
         }
-        return poly;
+        return node;
     }
 
-    // Base -> Unary Minus | Number | 'x' | '(' Expr ')'
     function parseBase() {
         let p = peek();
-        if (!p) return {0: 0};
-        if (p.type === '-') { consume(); return polyMul(parseBase(), {0: -1}); }
+        if (!p) return { type: 'FlatPoly', poly: {0: 0}, id: uid() };
+        if (p.type === '-') { consume(); return { type: 'Mul', left: { type: 'FlatPoly', poly: {0: -1}, id: uid() }, right: parseBase(), implicit: true, id: uid() }; }
         if (p.type === '+') { consume(); return parseBase(); }
-        if (p.type === 'NUM') { consume(); return {0: p.val}; }
-        if (p.type === 'x') { consume(); return {1: 1}; }
+        if (p.type === 'NUM') { consume(); return { type: 'FlatPoly', poly: {0: p.val}, id: uid() }; }
+        if (p.type === 'x') { consume(); return { type: 'FlatPoly', poly: {1: 1}, id: uid() }; }
         if (p.type === '(') {
             consume();
-            let poly = parseExpr();
+            let inner = parseExpr();
             if (peek() && peek().type === ')') consume();
             else throw "Mangler sluttparentes ')'";
-            return poly;
+            return { type: 'Parens', inner: inner, id: uid() };
         }
         throw "Ugyldig uttrykk ved: " + p.val;
     }
@@ -211,221 +191,303 @@ function parseTokens(tokens) {
     return parseExpr();
 }
 
-/**
- * Hovedfunksjon for å oversette tekst til matematikk-objekt
- */
 function parseSide(sideStr) {
-    console.group(`[PARSER] Analyserer: "${sideStr}"`);
-    let tokens = tokenize(sideStr);
-    console.log("Tokens:", tokens);
-    let poly = parseTokens(tokens);
-    console.log("Ferdig polynom:", poly);
+    console.groupCollapsed(`[AST] Analyserer streng: "${sideStr}"`);
+    let ast = parseTokens(tokenize(sideStr));
+    console.log("Generert AST:", ast);
     console.groupEnd();
-    return poly;
+    return ast;
 }
 
 
-// === SEKSJON: Formatering til HTML ===
+// === SEKSJON: Utregning av AST (Evaluering) ===
 
-function formatSideToHTML(mathObj) {
-    let keys = Object.keys(mathObj);
-    if (keys.length === 0) return `<span class="math-term">0</span>`;
-    
-    // Sorter eksponenter synkende (x^2, x, tall, x^-1)
-    let exps = keys.map(Number).sort((a, b) => b - a);
-    let htmlElements =[];
-
-    for (let i = 0; i < exps.length; i++) {
-        let exp = exps[i];
-        let coef = mathObj[exp];
-        let absCoef = Math.abs(coef);
-        
-        let termHtml = "";
-        let signStr = "";
-        
-        if (i === 0) {
-            if (coef < 0) signStr = "-";
-        } else {
-            if (coef < 0) signStr = " - ";
-            else signStr = " + ";
+// Tvinger en node og alle dens barn til å bli et vanlig, flatt matematikk-objekt
+function evaluateToPoly(node) {
+    if (node.type === 'FlatPoly') return node.poly;
+    if (node.type === 'Expr') {
+        let res = {};
+        for (let el of node.elements) {
+            let p = evaluateToPoly(el.node);
+            if (el.sign === 1) res = polyAdd(res, p);
+            else res = polySub(res, p);
         }
-
-        if (exp === 0) {
-            termHtml = `<span class="math-term">${absCoef}</span>`;
-        } else if (exp === -1) {
-            // Ekte brøk-rendering for 1/x, 12/x etc.
-            termHtml = `<span class="fraction"><span class="numerator">${absCoef}</span><span class="denominator">x</span></span>`;
-        } else if (exp === 1) {
-            let cStr = absCoef === 1 ? "" : absCoef;
-            termHtml = `<span class="math-term">${cStr}x</span>`;
-        } else {
-            // Ekte opphøyd potens for x^2, x^3 etc.
-            let cStr = absCoef === 1 ? "" : absCoef;
-            termHtml = `<span class="math-term">${cStr}x<sup>${exp}</sup></span>`;
-        }
-        
-        htmlElements.push(signStr + termHtml);
+        return res;
     }
-    return htmlElements.join('');
+    if (node.type === 'Mul') return polyMul(evaluateToPoly(node.left), evaluateToPoly(node.right));
+    if (node.type === 'Div') return polyDiv(evaluateToPoly(node.left), evaluateToPoly(node.right));
+    if (node.type === 'Pow') {
+        let base = evaluateToPoly(node.left);
+        let exp = evaluateToPoly(node.right);
+        if (Object.keys(exp).length !== 1 || exp['0'] === undefined) throw "Eksponent må være tall";
+        return polyPow(base, exp['0']);
+    }
+    if (node.type === 'Parens') return evaluateToPoly(node.inner);
+    if (node.type === 'Sqrt') return applySqrt(evaluateToPoly(node.inner));
+    return {0:0};
 }
 
-function createUnsimplifiedHTML(formattedSideHTML, operator, actionStr, needsParens) {
-    if (operator === '√') {
-        return `<span class="math-term">√</span>(${formattedSideHTML})`;
+
+// === SEKSJON: Interaktivitet (Når brukeren KLIKKER på en Node) ===
+
+// Regner kun ut akkurat den lille delen eleven klikker på
+function performLocalSimplification(node) {
+    if (node.type === 'Pow') {
+        let base = evaluateToPoly(node.left);
+        let exp = evaluateToPoly(node.right);
+        if (Object.keys(exp).length !== 1 || exp['0'] === undefined) throw "Eksponent må være tall";
+        return { type: 'FlatPoly', poly: polyPow(base, exp['0']), id: uid() };
     }
+    if (node.type === 'Mul') {
+        let isRightParen = node.right.type === 'Parens' && node.right.inner.type === 'Expr';
+        let isLeftParen = node.left.type === 'Parens' && node.left.inner.type === 'Expr';
+
+        // Ganger toeren inn i parentesen (Distribusjon)
+        if (isRightParen) {
+            return {
+                type: 'Expr',
+                elements: node.right.inner.elements.map(e => ({
+                    sign: e.sign,
+                    node: { type: 'Mul', left: node.left, right: e.node, implicit: node.implicit, id: uid() }
+                })),
+                id: uid()
+            };
+        } else if (isLeftParen) {
+             return {
+                type: 'Expr',
+                elements: node.left.inner.elements.map(e => ({
+                    sign: e.sign,
+                    node: { type: 'Mul', left: e.node, right: node.right, implicit: node.implicit, id: uid() }
+                })),
+                id: uid()
+            };
+        }
+        // Vanlig gange (f.eks 2 * 3x)
+        return { type: 'FlatPoly', poly: polyMul(evaluateToPoly(node.left), evaluateToPoly(node.right)), id: uid() };
+    }
+    if (node.type === 'Div') {
+        return { type: 'FlatPoly', poly: polyDiv(evaluateToPoly(node.left), evaluateToPoly(node.right)), id: uid() };
+    }
+    if (node.type === 'Parens') {
+        return node.inner; // Fjerner parentesen
+    }
+    if (node.type === 'Sqrt') {
+        return { type: 'FlatPoly', poly: applySqrt(evaluateToPoly(node.inner)), id: uid() };
+    }
+    return node;
+}
+
+window.triggerNodeClick = function(e, id) {
+    e.stopPropagation(); // Hindrer at vi også klikker på noder bak denne
     
-    // Prøv å formatere actionStr pent med parseren
-    let actionHTML;
+    let lastLine = state.lines[state.lines.length - 1];
+    let changed = false;
+
+    function traverseAndReplace(node) {
+        if (!node) return node;
+        if (node.id === id) {
+            changed = true;
+            return performLocalSimplification(node);
+        }
+        if (node.type === 'Expr') {
+            return { ...node, elements: node.elements.map(e => ({ sign: e.sign, node: traverseAndReplace(e.node) })) };
+        } else if (node.type === 'Mul' || node.type === 'Div' || node.type === 'Pow') {
+            return { ...node, left: traverseAndReplace(node.left), right: traverseAndReplace(node.right) };
+        } else if (node.type === 'Parens' || node.type === 'Sqrt') {
+            return { ...node, inner: traverseAndReplace(node.inner) };
+        }
+        return node;
+    }
+
     try {
-        let actPoly = parseSide(actionStr);
-        actionHTML = formatSideToHTML(actPoly);
-    } catch(e) {
-        actionHTML = `<span class="math-term">${actionStr}</span>`;
-    }
+        lastLine.mathState.lState = traverseAndReplace(lastLine.mathState.lState);
+        lastLine.mathState.rState = traverseAndReplace(lastLine.mathState.rState);
 
-    if (operator === '*' || operator === '/') {
-        let leftPart = needsParens ? `(${formattedSideHTML})` : formattedSideHTML;
-        let actionNeedsParens = actionStr.includes('+') || (actionStr.includes('-') && !actionStr.startsWith('-'));
-        let rightPart = actionNeedsParens ? `(${actionHTML})` : actionHTML;
-        
-        return `${leftPart} <span class="math-term">${operator}</span> ${rightPart}`;
-    } else {
-        return `${formattedSideHTML} <span class="math-term">${operator}</span> ${actionHTML}`;
+        if (changed) {
+            // Sjekk om ligningen ble løst gjennom dette klikket!
+            try {
+                let lFlat = evaluateToPoly(lastLine.mathState.lState);
+                let rFlat = evaluateToPoly(lastLine.mathState.rState);
+                if (isSolved(lFlat, rFlat)) {
+                    state.currentStatus = 'SOLVED';
+                    document.getElementById('success-message').classList.remove('hidden');
+                }
+            } catch(ignore) {}
+            
+            renderWorkspace();
+        }
+    } catch(err) {
+        alert("Kan ikke utføre: " + err);
     }
+};
+
+
+// === SEKSJON: HTML Rendering av Tre-strukturen ===
+
+function renderFlatPoly(poly) {
+    let keys = Object.keys(poly).map(Number).sort((a,b)=>b-a);
+    if (keys.length === 0) return `0`;
+    let html = '';
+    for (let i = 0; i < keys.length; i++) {
+        let exp = keys[i];
+        let coef = poly[exp];
+        let abs = Math.abs(coef);
+        
+        let sign = '';
+        if (i > 0) sign = coef < 0 ? ' - ' : ' + ';
+        else if (coef < 0) sign = '-';
+
+        let term = '';
+        if (exp === 0) term = abs;
+        else if (exp === -1) term = `<span class="fraction"><span class="numerator">${abs}</span><span class="denominator">x</span></span>`;
+        else if (exp === 1) term = `${abs === 1 ? '' : abs}x`;
+        else term = `${abs === 1 ? '' : abs}x<sup>${exp}</sup>`;
+
+        html += sign + `<span class="math-term">${term}</span>`;
+    }
+    return html;
+}
+
+function renderAST(node) {
+    if (node.type === 'FlatPoly') return renderFlatPoly(node.poly);
+    
+    // Noder som brukeren kan samhandle med:
+    let wrap = (inner) => `<span class="interactive-node" onclick="triggerNodeClick(event, '${node.id}')" title="Trykk for å regne ut">${inner}</span>`;
+    
+    if (node.type === 'Pow') return wrap(`${renderAST(node.left)}<sup>${renderAST(node.right)}</sup>`);
+    if (node.type === 'Parens') return wrap(`(${renderAST(node.inner)})`);
+    if (node.type === 'Sqrt') return wrap(`&radic;(${renderAST(node.inner)})`);
+    if (node.type === 'Mul') {
+        let lHtml = renderAST(node.left);
+        let rHtml = renderAST(node.right);
+        return wrap(`${lHtml}${node.implicit ? '' : ' &middot; '}${rHtml}`);
+    }
+    if (node.type === 'Div') {
+        return wrap(`<span class="fraction"><span class="numerator">${renderAST(node.left)}</span><span class="denominator">${renderAST(node.right)}</span></span>`);
+    }
+    if (node.type === 'Expr') {
+        let html = '';
+        node.elements.forEach((el, i) => {
+            let signStr = '';
+            if (i === 0) signStr = el.sign === -1 ? '-' : '';
+            else signStr = el.sign === 1 ? ' + ' : ' - ';
+            html += signStr + renderAST(el.node);
+        });
+        return `<span class="math-term">${html}</span>`;
+    }
+    return '';
 }
 
 
 // === SEKSJON: Spill-logikk & Operasjoner ===
 
-function isSolved(lState, rState) {
-    let lKeys = Object.keys(lState);
-    let rKeys = Object.keys(rState);
-
-    const isSingleX = (stateObj, keys) => keys.length === 1 && keys[0] === '1' && stateObj['1'] === 1;
-    const isNumberOnly = (stateObj, keys) => keys.length === 1 && keys[0] === '0';
-
-    if (isSingleX(lState, lKeys) && isNumberOnly(rState, rKeys)) return true;
-    if (isSingleX(rState, rKeys) && isNumberOnly(lState, lKeys)) return true;
+function isSolved(lPoly, rPoly) {
+    let lKeys = Object.keys(lPoly);
+    let rKeys = Object.keys(rPoly);
+    const isSingleX = (p, keys) => keys.length === 1 && keys[0] === '1' && p['1'] === 1;
+    const isNumOnly = (p, keys) => keys.length === 1 && keys[0] === '0';
+    if (lKeys.length === 0) lKeys = ['0'];
+    if (rKeys.length === 0) rKeys =['0'];
     
+    if (isSingleX(lPoly, lKeys) && isNumOnly(rPoly, rKeys)) return true;
+    if (isSingleX(rPoly, rKeys) && isNumOnly(lPoly, lKeys)) return true;
     return false;
 }
 
-function applyMathAction(currentMathState, operator, actionStr) {
-    let lState = { ...currentMathState.lState };
-    let rState = { ...currentMathState.rState };
-    
-    try {
-        if (operator === '√') {
-            lState = applySqrt(lState);
-            rState = applySqrt(rState);
-        } else {
-            let actionPoly = parseSide(actionStr);
-            if (operator === '+') {
-                lState = polyAdd(lState, actionPoly);
-                rState = polyAdd(rState, actionPoly);
-            } else if (operator === '-') {
-                lState = polySub(lState, actionPoly);
-                rState = polySub(rState, actionPoly);
-            } else if (operator === '*') {
-                lState = polyMul(lState, actionPoly);
-                rState = polyMul(rState, actionPoly);
-            } else if (operator === '/') {
-                lState = polyDiv(lState, actionPoly);
-                rState = polyDiv(rState, actionPoly);
-            }
-        }
-        return { newState: { lState, rState }, error: null };
-    } catch(err) {
-        return { error: err.toString() };
-    }
-}
-
 function startEquation(leftStr, rightStr) {
-    console.clear();
-    console.group(`=== STARTER NY LIGNING ===`);
-    
     try {
         let lParsed = parseSide(leftStr);
         let rParsed = parseSide(rightStr);
-        
-        let cleanLeft = formatSideToHTML(lParsed);
-        let cleanRight = formatSideToHTML(rParsed);
-
         state.lines =[{
-            type: 'SIMPLIFIED',
+            type: 'READY',
             mathState: { lState: lParsed, rState: rParsed },
-            displayLeft: cleanLeft,
-            displayRight: cleanRight,
             pastAction: null
         }];
         
-        state.currentStatus = isSolved(lParsed, rParsed) ? 'SOLVED' : 'WAITING_FOR_ACTION';
+        // Sjekk om ferdig evaluert er løst
+        let solved = false;
+        try { solved = isSolved(evaluateToPoly(lParsed), evaluateToPoly(rParsed)); } catch(e){}
+        state.currentStatus = solved ? 'SOLVED' : 'WAITING_FOR_ACTION';
+        
         document.getElementById('success-message').classList.add('hidden');
         renderWorkspace();
     } catch (err) {
-        alert("Feil under lesing av ligning: " + err);
+        alert("Feil under oppstart: " + err);
     }
-    console.groupEnd();
+}
+
+function appendActionToAST(ast, op, actionAst) {
+    if (op === '+' || op === '-') {
+        let sign = op === '+' ? 1 : -1;
+        // Hvis vi trekker fra et stort uttrykk, wrap det i parantes så minuset treffer alt
+        if (actionAst && actionAst.type === 'Expr' && actionAst.elements.length > 1) {
+            actionAst = { type: 'Parens', inner: actionAst, id: uid() };
+        }
+        if (ast.type === 'Expr') return { ...ast, elements:[...ast.elements, { sign, node: actionAst }] };
+        return { type: 'Expr', elements:[{sign: 1, node: ast}, {sign, node: actionAst}], id: uid() };
+    } 
+    else if (op === '*' || op === '/') {
+        let needsParens = ast.type === 'Expr';
+        let leftNode = needsParens ? { type: 'Parens', inner: ast, id: uid() } : ast;
+        
+        if (actionAst && actionAst.type === 'Expr' && actionAst.elements.length > 1) {
+            actionAst = { type: 'Parens', inner: actionAst, id: uid() };
+        }
+        return { type: op === '*' ? 'Mul' : 'Div', left: leftNode, right: actionAst, implicit: false, id: uid() };
+    } 
+    else if (op === '√') {
+        return { type: 'Sqrt', inner: ast, id: uid() };
+    }
 }
 
 function handleActionSubmit(operator, actionStr) {
     if (operator !== '√' && (!actionStr || actionStr.trim() === '')) return;
     
     let lastLine = state.lines[state.lines.length - 1];
-    
-    // For visualisering i input-historikk (også parser vi den så den blir pen)
-    let actionHistoryHTML = operator === '√' ? '√' : `${operator} ${actionStr}`;
-    lastLine.pastAction = actionHistoryHTML;
+    lastLine.pastAction = operator === '√' ? '√' : `${operator} ${actionStr}`;
 
-    let lNeedsParens = Object.keys(lastLine.mathState.lState).length > 1;
-    let rNeedsParens = Object.keys(lastLine.mathState.rState).length > 1;
+    let actionAST = operator !== '√' ? parseSide(actionStr) : null;
+    let newL = appendActionToAST(lastLine.mathState.lState, operator, actionAST);
+    let newR = appendActionToAST(lastLine.mathState.rState, operator, actionAST);
 
-    let unsimplifiedRow = {
+    state.lines.push({
         type: 'UNSIMPLIFIED',
-        displayLeft: createUnsimplifiedHTML(lastLine.displayLeft, operator, actionStr, lNeedsParens),
-        displayRight: createUnsimplifiedHTML(lastLine.displayRight, operator, actionStr, rNeedsParens),
-        pendingOperator: operator,
-        pendingActionStr: actionStr 
-    };
+        mathState: { lState: newL, rState: newR }
+    });
     
-    state.lines.push(unsimplifiedRow);
     state.currentStatus = 'WAITING_FOR_SIMPLIFY';
     renderWorkspace();
 }
 
+// "Forenkle"-knappen. Regner ut ALT på raden.
 function handleSimplify() {
     let unsimplifiedLine = state.lines[state.lines.length - 1];
-    let lastMathState = state.lines[state.lines.length - 2].mathState;
     
-    let mathResult = applyMathAction(lastMathState, unsimplifiedLine.pendingOperator, unsimplifiedLine.pendingActionStr);
-    
-    if (mathResult.error) {
-        alert(mathResult.error);
-        state.lines.pop();
-        state.lines[state.lines.length - 1].pastAction = null;
-        state.currentStatus = 'WAITING_FOR_ACTION';
+    try {
+        let flatL = evaluateToPoly(unsimplifiedLine.mathState.lState);
+        let flatR = evaluateToPoly(unsimplifiedLine.mathState.rState);
+
+        let simplifiedRow = {
+            type: 'READY',
+            mathState: {
+                lState: { type: 'FlatPoly', poly: flatL, id: uid() },
+                rState: { type: 'FlatPoly', poly: flatR, id: uid() }
+            },
+            pastAction: null
+        };
+
+        state.lines.push(simplifiedRow);
+        
+        if (isSolved(flatL, flatR)) {
+            state.currentStatus = 'SOLVED';
+            document.getElementById('success-message').classList.remove('hidden');
+        } else {
+            state.currentStatus = 'WAITING_FOR_ACTION';
+        }
         renderWorkspace();
-        return;
+    } catch(err) {
+        alert("Feil under utregning: " + err);
     }
-
-    let newMathState = mathResult.newState;
-    let simplifiedRow = {
-        type: 'SIMPLIFIED',
-        mathState: newMathState,
-        displayLeft: formatSideToHTML(newMathState.lState),
-        displayRight: formatSideToHTML(newMathState.rState),
-        pastAction: null
-    };
-
-    state.lines.push(simplifiedRow);
-    
-    if (isSolved(newMathState.lState, newMathState.rState)) {
-        state.currentStatus = 'SOLVED';
-        document.getElementById('success-message').classList.remove('hidden');
-    } else {
-        state.currentStatus = 'WAITING_FOR_ACTION';
-    }
-    renderWorkspace();
 }
 
 
@@ -442,7 +504,7 @@ function renderWorkspace() {
         
         const leftDiv = document.createElement('div');
         leftDiv.className = `left-side ${line.type === 'UNSIMPLIFIED' ? 'unsimplified' : ''}`;
-        leftDiv.innerHTML = line.displayLeft; // Bruker innerHTML for brøker og sup
+        leftDiv.innerHTML = renderAST(line.mathState.lState);
         
         const equalsDiv = document.createElement('div');
         equalsDiv.className = 'equals';
@@ -450,62 +512,35 @@ function renderWorkspace() {
         
         const rightDiv = document.createElement('div');
         rightDiv.className = `right-side ${line.type === 'UNSIMPLIFIED' ? 'unsimplified' : ''}`;
-        rightDiv.innerHTML = line.displayRight;
+        rightDiv.innerHTML = renderAST(line.mathState.rState);
         
         const actionDiv = document.createElement('div');
         actionDiv.className = 'action-cell';
 
-        if (line.type === 'SIMPLIFIED') {
-            if (line.pastAction) {
-                actionDiv.innerHTML = `<span class="action-box">${line.pastAction}</span>`;
-            } else if (isLastRow && state.currentStatus === 'WAITING_FOR_ACTION') {
-                actionDiv.innerHTML = `
-                    <div class="active-action-panel">
-                        <select id="op-select">
-                            <option value="+">+</option>
-                            <option value="-">-</option>
-                            <option value="*">*</option>
-                            <option value="/">/</option>
-                            <option value="√">√</option>
-                        </select>
-                        <input type="text" id="action-input" placeholder="f.eks. x" autocomplete="off">
-                        <button id="btn-apply-action" class="btn-small">Utfør</button>
-                    </div>
-                `;
-                
-                setTimeout(() => {
-                    const btn = document.getElementById('btn-apply-action');
-                    const input = document.getElementById('action-input');
-                    const select = document.getElementById('op-select');
-                    
-                    if(btn && input && select) {
-                        select.addEventListener('change', () => {
-                            if (select.value === '√') {
-                                input.style.display = 'none';
-                                input.value = '';
-                            } else {
-                                input.style.display = 'inline-block';
-                            }
-                        });
-
-                        btn.addEventListener('click', () => {
-                            handleActionSubmit(select.value, input.value);
-                        });
-                        
-                        input.addEventListener('keypress', (e) => {
-                            if (e.key === 'Enter') btn.click();
-                        });
-                        
-                        input.focus();
-                    }
-                }, 0);
-            }
-        } else if (line.type === 'UNSIMPLIFIED') {
-            if (isLastRow && state.currentStatus === 'WAITING_FOR_SIMPLIFY') {
+        if (line.pastAction) {
+            actionDiv.innerHTML = `<span class="action-box">${line.pastAction}</span>`;
+        } else if (isLastRow) {
+            if (state.currentStatus === 'WAITING_FOR_ACTION' || state.currentStatus === 'SOLVED') {
+                if (state.currentStatus !== 'SOLVED') {
+                    actionDiv.innerHTML = `
+                        <div class="active-action-panel">
+                            <select id="op-select">
+                                <option value="+">+</option>
+                                <option value="-">-</option>
+                                <option value="*">*</option>
+                                <option value="/">/</option>
+                                <option value="√">√</option>
+                            </select>
+                            <input type="text" id="action-input" placeholder="x" autocomplete="off">
+                            <button id="btn-apply-action" class="btn-small">Utfør</button>
+                        </div>
+                    `;
+                    setTimeout(() => bindActionEvents(), 0);
+                }
+            } else if (state.currentStatus === 'WAITING_FOR_SIMPLIFY') {
                 actionDiv.innerHTML = `<button id="btn-simplify" class="btn-small btn-simplify">Regn ut & Forenkle</button>`;
                 setTimeout(() => {
-                    const btn = document.getElementById('btn-simplify');
-                    if(btn) btn.addEventListener('click', handleSimplify);
+                    document.getElementById('btn-simplify').addEventListener('click', handleSimplify);
                 }, 0);
             }
         }
@@ -521,27 +556,36 @@ function renderWorkspace() {
     container.scrollTop = container.scrollHeight;
 }
 
+function bindActionEvents() {
+    const btn = document.getElementById('btn-apply-action');
+    const input = document.getElementById('action-input');
+    const select = document.getElementById('op-select');
+    
+    if(btn && input && select) {
+        select.addEventListener('change', () => {
+            if (select.value === '√') {
+                input.style.display = 'none';
+                input.value = '';
+            } else {
+                input.style.display = 'inline-block';
+            }
+        });
+        btn.addEventListener('click', () => handleActionSubmit(select.value, input.value));
+        input.addEventListener('keypress', (e) => { if (e.key === 'Enter') btn.click(); });
+        input.focus();
+    }
+}
+
 // === SEKSJON: Initialisering av Kontroller ===
 document.getElementById('btn-load-example').addEventListener('click', () => {
-    const select = document.getElementById('example-select');
-    const eq = examples[select.value];
-    startEquation(eq.left, eq.right);
+    startEquation(examples[document.getElementById('example-select').value].left, examples[document.getElementById('example-select').value].right);
 });
 
 document.getElementById('btn-load-custom').addEventListener('click', () => {
-    const left = document.getElementById('custom-left').value;
-    const right = document.getElementById('custom-right').value;
-    if(left && right) {
-        startEquation(left, right);
-    } else {
-        alert("Fyll inn begge sider av ligningen.");
-    }
+    let l = document.getElementById('custom-left').value, r = document.getElementById('custom-right').value;
+    if(l && r) startEquation(l, r); else alert("Fyll inn begge sider av ligningen.");
 });
 
-// Start
-window.onload = () => {
-    const eq = examples[0];
-    startEquation(eq.left, eq.right);
-};
+window.onload = () => startEquation(examples[0].left, examples[0].right);
 
-/* Version: #7 */
+/* Version: #13 */
