@@ -1,4 +1,4 @@
-/* Version: #6 */
+/* Version: #12 */
 :root {
     --bg-color: #f4f7f6;
     --paper-color: #ffffff;
@@ -11,6 +11,7 @@
     --success-hover: #218838;
     --warning-color: #ffc107;
     --warning-hover: #e0a800;
+    --interactive-hover-bg: #e2e6ea;
 }
 
 body {
@@ -107,7 +108,7 @@ header {
     padding: 10px 0;
     border-bottom: 1px dashed transparent;
     transition: border-bottom 0.2s;
-    min-height: 60px; /* Sikrer nok plass til høye brøker */
+    min-height: 60px;
 }
 
 .math-row:hover {
@@ -121,6 +122,7 @@ header {
     justify-content: flex-end;
     align-items: center;
     flex-wrap: wrap;
+    gap: 5px;
 }
 
 .equals {
@@ -135,6 +137,7 @@ header {
     justify-content: flex-start;
     align-items: center;
     flex-wrap: wrap;
+    gap: 5px;
 }
 
 .unsimplified {
@@ -142,7 +145,7 @@ header {
     font-style: italic;
 }
 
-/* --- Nytt: Matematisk Formatering (Brøk og Potens) --- */
+/* --- Matematisk Formatering (Brøk og Potens) --- */
 .math-term {
     display: inline-flex;
     align-items: center;
@@ -180,6 +183,30 @@ sup {
     margin-left: 2px;
 }
 
+/* --- Nytt: Interaktive (klikkbare) AST-Noder --- */
+.interactive-node {
+    cursor: pointer;
+    border-radius: 4px;
+    padding: 2px 4px;
+    margin: 0 2px;
+    border-bottom: 1px dotted #999;
+    transition: background-color 0.2s, transform 0.1s, box-shadow 0.2s;
+    display: inline-flex;
+    align-items: center;
+}
+
+.interactive-node:hover {
+    background-color: var(--interactive-hover-bg);
+    border-bottom: 1px solid var(--accent-color);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transform: translateY(-1px);
+}
+
+.interactive-node:active {
+    transform: translateY(1px);
+    box-shadow: none;
+}
+
 /* --- Handlingsboks (Høyre kolonne) --- */
 .action-cell {
     text-align: left;
@@ -189,7 +216,6 @@ sup {
     gap: 10px;
 }
 
-/* Statisk boks for historikk (tegnet boks-stil) */
 .action-box {
     border: 2px solid #555;
     padding: 5px 15px;
@@ -207,7 +233,6 @@ sup {
     margin-right: 5px;
 }
 
-/* Aktivt panel for input */
 .active-action-panel {
     display: flex;
     gap: 5px;
@@ -290,4 +315,4 @@ sup {
         padding: 4px;
     }
 }
-/* Version: #6 */
+/* Version: #12 */
